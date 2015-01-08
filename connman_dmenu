@@ -5,7 +5,7 @@ readonly VPN_STORAGE_PATH=/var/lib/connman-vpn
 
 get_services() {
 	if [[ -f $SCAN_RESULT ]]; then
-		dmenu_notify "another connman_dmenu is running"
+		send_notification "another connman_dmenu is running"
 		exit 1
 	fi
 	: > $SCAN_RESULT
@@ -77,8 +77,8 @@ create_dmenu() {
 }
 
 # $1 = msg
-dmenu_notify() {
-	: | dmenu -p "$1 (press enter)"
+send_notification() {
+	notify-send "$1"
 }
 
 # $1 = question
@@ -86,15 +86,10 @@ dmenu_notify() {
 dmenu_ask() {
 	IFS= read -r "$2" < <(: | dmenu -p "$1")
 	if [[ ! "${!2}" ]]; then
-		dmenu_notify "Invalid $2"
+		send_notification "Invalid $2"
 		exit 1
 	fi
 }
-
-if (( EUID != 0 )); then
-	dmenu_notify "Please run it as root"
-	exit 1
-fi
 
 get_services
 index="$(create_dmenu | dmenu -l "$(( $(count_services) + 1))" -i -p "Select wifi service" | sed 's/^ *//g' | cut -d ' ' -f 1)"
@@ -115,7 +110,7 @@ if [[ "$index" == setup ]] ; then
 	PPTP.User = $identity
 	PPTP.Password = $password
 	EOF
-	dmenu_notify "VPN $name is created"
+	send_notification "VPN $name is created"
 	exit 0
 fi
 
@@ -127,7 +122,7 @@ echo "$name { $service_id }"
 
 if [[ ! "$(get_service_state "$service_id")" =~ ^(idle|failure)$ ]]; then
 	connmanctl disconnect "$service_id"
-	dmenu_notify "$name disconnected"
+	send_notification "$name disconnected"
 	exit 0
 fi
 
@@ -153,7 +148,7 @@ if [[ "$security" =~ ^(ieee8021x|psk|wep)$ ]]; then
 				phase2=PAP
 			;;
 			*)
-				dmenu_notify "Invalid EAP"
+				send_notification "Invalid EAP"
 				exit 1
 			;;
 			esac
@@ -180,11 +175,12 @@ if [[ "$security" =~ ^(ieee8021x|psk|wep)$ ]]; then
 	fi
 fi
 
-connman_msg="$(timeout 10 connmanctl connect "$service_id" 2>&1 | head -n 1)"
+connman_msg="$(connmanctl connect "$service_id" | head -n 1)"
+
 if grep -qi ^connected <<<"$connman_msg" ; then
-	dmenu_notify "connected to $name"
+	send_notification "connected to $name"
 else
 	error_msg="automatic timeout for connman_dmenu"
 	[[ "$connman_msg" ]] && error_msg="$(cut -d ' ' -f 3- <<<"$connman_msg")"
-	dmenu_notify "cannot connect to $name ($error_msg)"
+	send_notification "cannot connect to $name ($error_msg)"
 fi
